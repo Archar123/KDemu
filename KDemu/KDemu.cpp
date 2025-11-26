@@ -197,12 +197,10 @@ int main(int argc, char** argv, char** envp) {
 		return EXIT_FAILURE;
 	}
 
-	InitializeCriticalSection(&peLoader.cs);
 	DWORD s = GetCurrentThreadId();
 	HANDLE thread = CreateThread(nullptr, 8192, (LPTHREAD_START_ROUTINE)mainThread, 0, 0, nullptr);
 
 	WaitForSingleObject(thread, INFINITE);
 
-	DeleteCriticalSection(&peLoader.cs);
 	return 0;
 }

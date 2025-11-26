@@ -76,16 +76,16 @@ public:
 
 	static const uint64_t Emu_file_Base = 0xfffff805dc9a0000;
 
-	uint64_t NtoskrnlBase = 0xfffff8052e400000;
+	//uint64_t NtoskrnlBase = 0xfffff8052e400000;
 
-	uint64_t StackBase = 0xffff890a9a3c7000;
+	//uint64_t cibase = 0xfffff80532e00000;
 
-	uint64_t cibase = 0xfffff80532e00000;
+	//uint64_t halbase = 0xfffff8052d520000;
 
-	uint64_t halbase = 0xfffff8052d520000;
+	//uint64_t cngbase = 0xfffff80532ef0000;
 
-	uint64_t cngbase = 0xfffff80532ef0000;
 	const uint64_t GsBase = 0xfffff80506d51000;
+
 	static const uint64_t scratch = 0xffffffff00000000;
 
 	const uint64_t StackSize = 0x1000;
@@ -105,9 +105,6 @@ public:
 	uint64_t lastExcept;
 
 	uint64_t lastAlloc;
-	volatile LONG g_flag = 0;
-	volatile LONG g_running = 1;
-	CRITICAL_SECTION cs;
 
 	HANDLE errorevent;
 

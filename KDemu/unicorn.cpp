@@ -736,7 +736,7 @@ void Unicorn::hook_mem_write(uc_engine* uc, uc_mem_type type, uint64_t address, 
 // MOD_TEST
 void Unicorn::hook_File_func(uc_engine* uc, std::string fileName, std::string funcName, void(*func)(uc_engine*, uint64_t, uint32_t, void*)) {
 	for (auto& peFile : loader->peFiles) {
-		uint64_t Base = peFile->Base;
+		uint64_t Base = peFile->Base;		
 		uint64_t RVA = peFile->FuncAddr[funcName];
 		uc_hook trace;
 		if (RVA != 0) {

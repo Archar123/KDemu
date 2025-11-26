@@ -113,46 +113,12 @@ typedef struct _UNICODE_STRING {
 } UNICODE_STRING, * PUNICODE_STRING;
 
 void fasttest();
-/// <summary>
-/// �Q�� windows���WideCharToMultiByte�Nwstring�নstring
-/// </summary>
-/// <param name="str">Ū�J�ഫ�r�ꪺ�ܼ�</param>
-/// <param name="out">�x�s�ഫ�r�ꪺ�ܼ�</param>
 void UnicodeToANSI(const std::wstring& str, std::string& out);
-/// <summary>
-/// �Q��windows���WideCharToMultiByte�Nstring�নwstring
-/// </summary>
-/// <param name="str">Ū�J�ഫ�r�ꪺ�ܼ�</param>
-/// <param name="out">�x�s�ഫ�r�ꪺ�ܼ�</param>
 void ANSIToUnicode(const std::string& str, std::wstring& out);
 
-/// <summary>
-/// �Q��windows���RtlInitUnicodeString�Nwstring�নUNICODE_STRING
-/// </summary>
-/// <param name="KeyPath">�x�s�ഫ�r�ꪺ�ܼ�</param>
-/// <param name="file_name_str">Ū�J�ഫ�r�ꪺ�ܼ�</param>
 void ConvertToUnicodeString(UNICODE_STRING& KeyPath, const std::wstring& file_name_str);
-/// <summary>
-/// �q memŪ�Junicode�r����নwstring
-/// </summary>
-/// <param name="uc"></param>
-/// <param name="address">Ū�����_�l�a�}</param>
-/// <param name="str">�x�s�ഫ�r�ꪺ�ܼ�</param>
-/// <returns></returns>
 bool read_null_unicode_string(uc_engine* uc, uint64_t address, std::wstring& str);
-/// <summary>
-/// Ū�� UNICODE_STRING ���c���
-/// </summary>
-/// <param name="uc"></param>
-/// <param name="unicode_string_addr">Ū�J���_�l��m</param>
-/// <returns></returns>
 std::wstring read_unicode_string(uc_engine* uc, uint64_t unicode_string_addr);
-/// <summary>
-/// Ū�� ANSI_STRING ���c���
-/// </summary>
-/// <param name="uc"></param>
-/// <param name="ansi_string_addr">Ū�J���_�l��m</param>
-/// <returns></returns>
 std::string read_ansi_string(uc_engine* uc, uint64_t ansi_string_addr);
 
 void fastCallRetHook(uc_engine* uc);

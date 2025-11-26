@@ -754,7 +754,8 @@ bool PEloader::LoadPE(const std::string path) {
 		&peFiles[0]->ExceptionTableSize);
 	peFiles[0]->ExceptionTable = peFiles[0]->Base + ((PUCHAR)ExceptionTable - (PUCHAR)peFiles[0]->memMap);
 
-	uint64_t RtlpInvertedFunctionTableList = 0xfffff80508c18088;
+
+	uint64_t RtlpInvertedFunctionTableList = g_Debugger->GetSymbol("nt!PsInvertedFunctionTable") + 0x30;//0xfffff80508c18088; //PsInvertedFunctionTable
 	uint64_t imagebase = 0xfffff80508c18090;
 	uint64_t imagesizebase = 0xfffff80508c18098;
 	uint64_t ExceptionTableSizebase = 0xfffff80508c1809C;
