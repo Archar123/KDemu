@@ -154,6 +154,7 @@ std::uint64_t Debugger_t::GetSymbol(std::string_view Name) const {
     uint64_t Offset = 0;
 
     HRESULT Status = Symbols_->GetOffsetByName(Name.data(), &Offset);
+    
     if (FAILED(Status)) {
         if (Status == S_FALSE) {
             return 0ull;
@@ -323,4 +324,244 @@ uint64_t Debugger_t::GetFunctionVaFromExport(const std::string& fileName,
     }
 
     return 0;
+}
+
+
+std::vector<std::string> Debugger_t::GetAllExportFunctionNames(const std::string& fileName)
+{
+    std::vector<std::string> result;
+
+    auto moduleInfo = GetModuleByFileName(fileName);
+    if (fileName == "ntoskrnl.exe") {
+        moduleInfo = GetModule("nt");
+    }
+
+    if (!moduleInfo) {
+        Logger::Log(true, RED, "Failed to find module %s to load its content\n", fileName.c_str());
+        return result;
+    }
+
+    uint64_t moduleBaseVa = moduleInfo->BaseAddress;
+
+    // 跟原本一樣：從 dump 把整個模組拼成一塊連續 buffer
+    if (!MappedBinaryContent_.contains(moduleBaseVa)) {
+        std::vector<uint8_t> contigusBinaryData_(moduleInfo->Size, 0);
+
+        for (size_t offset = 0; offset < moduleInfo->Size; offset += 0x1000) {
+            auto data = GetVirtualPage(moduleBaseVa + offset);
+            if (!data) continue;
+
+            size_t copySize = std::min(static_cast<size_t>(0x1000), moduleInfo->Size - offset);
+            std::memcpy(contigusBinaryData_.data() + offset, data, copySize);
+        }
+
+        MappedBinaryContent_[moduleBaseVa] = std::move(contigusBinaryData_);
+    }
+
+    auto& contigusBinaryData = MappedBinaryContent_.at(moduleBaseVa);
+
+    auto moduleBase = contigusBinaryData.data();
+    auto dosHeader = reinterpret_cast<IMAGE_DOS_HEADER*>(moduleBase);
+    auto ntHeaders = reinterpret_cast<IMAGE_NT_HEADERS*>(
+        (uint8_t*)moduleBase + dosHeader->e_lfanew);
+
+    auto exportDirRVA = ntHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
+    if (!exportDirRVA)
+        return result; // no export
+
+    auto exportDir = reinterpret_cast<IMAGE_EXPORT_DIRECTORY*>(
+        (uint8_t*)moduleBase + exportDirRVA);
+
+    auto names = reinterpret_cast<uint32_t*>((uint8_t*)moduleBase + exportDir->AddressOfNames);
+    auto funcs = reinterpret_cast<uint32_t*>((uint8_t*)moduleBase + exportDir->AddressOfFunctions);
+    auto ordinals = reinterpret_cast<uint16_t*>((uint8_t*)moduleBase + exportDir->AddressOfNameOrdinals);
+
+    for (uint32_t i = 0; i < exportDir->NumberOfNames; i++) {
+        const char* name = (const char*)((uint8_t*)moduleBase + names[i]);
+        if (!name || !*name)
+            continue;
+
+        // 這裡單純收集名字
+        result.emplace_back(name);
+
+        // 如果只要名字就這樣，VA 不用管
+        // 如果之後要 VA，可以再補：
+        // uint16_t ordinal = ordinals[i];
+        // uint32_t funcRVA = funcs[ordinal];
+        // uint64_t funcVA  = funcRVA + moduleBaseVa;
+    }
+
+    return result;
+}
+
+
+
+
+std::vector<ExportFunctionInfo> Debugger_t::GetAllExportFunctions(const std::string& fileName)
+{
+    std::vector<ExportFunctionInfo> result;
+
+    auto moduleInfo = GetModuleByFileName(fileName);
+    if (fileName == "ntoskrnl.exe") {
+        moduleInfo = GetModule("nt");
+    }
+
+    if (!moduleInfo) {
+        Logger::Log(true, RED, "Failed to find module %s to load its content\n", fileName.c_str());
+        return result;
+    }
+
+    uint64_t moduleBaseVa = moduleInfo->BaseAddress;
+
+    if (!MappedBinaryContent_.contains(moduleBaseVa)) {
+        std::vector<uint8_t> contigusBinaryData_(moduleInfo->Size, 0);
+
+        for (size_t offset = 0; offset < moduleInfo->Size; offset += 0x1000) {
+            auto data = GetVirtualPage(moduleBaseVa + offset);
+            if (!data) continue;
+
+            size_t copySize = std::min(static_cast<size_t>(0x1000), moduleInfo->Size - offset);
+            std::memcpy(contigusBinaryData_.data() + offset, data, copySize);
+        }
+
+        MappedBinaryContent_[moduleBaseVa] = std::move(contigusBinaryData_);
+    }
+
+    auto& contigusBinaryData = MappedBinaryContent_.at(moduleBaseVa);
+
+    auto moduleBase = contigusBinaryData.data();
+    auto dosHeader = reinterpret_cast<IMAGE_DOS_HEADER*>(moduleBase);
+    auto ntHeaders = reinterpret_cast<IMAGE_NT_HEADERS*>(
+        (uint8_t*)moduleBase + dosHeader->e_lfanew);
+
+    auto exportDirRVA = ntHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
+    if (!exportDirRVA)
+        return result;
+
+    auto exportDir = reinterpret_cast<IMAGE_EXPORT_DIRECTORY*>(
+        (uint8_t*)moduleBase + exportDirRVA);
+
+    auto names = reinterpret_cast<uint32_t*>((uint8_t*)moduleBase + exportDir->AddressOfNames);
+    auto funcs = reinterpret_cast<uint32_t*>((uint8_t*)moduleBase + exportDir->AddressOfFunctions);
+    auto ordinals = reinterpret_cast<uint16_t*>((uint8_t*)moduleBase + exportDir->AddressOfNameOrdinals);
+
+    for (uint32_t i = 0; i < exportDir->NumberOfNames; i++) {
+        const char* name = (const char*)((uint8_t*)moduleBase + names[i]);
+        if (!name || !*name)
+            continue;
+
+        uint16_t ordinal = ordinals[i];
+        uint32_t funcRVA = funcs[ordinal];
+        uint64_t funcVA = funcRVA + moduleBaseVa;
+
+        result.push_back(ExportFunctionInfo{
+            .Name = name,
+            .Va = funcVA,
+            });
+    }
+
+    return result;
+}
+
+
+bool Debugger_t::IsFunctionTag(ULONG tag)
+{
+    // 依需要再加別的，像 Thunk / PublicSymbol
+    return tag == SYM_TAG_FUNCTION ||
+        tag == SYM_TAG_PUBLIC_SYMBOL ||
+        tag == SYM_TAG_THUNK;
+}
+std::vector<ExportFunctionInfo> Debugger_t::ListAllFunctionsByDbgEng(const std::string& fileName)
+{
+    std::vector<ExportFunctionInfo> result;
+
+    // 先用你現有的 API 找到模組
+    const ModuleInfo* moduleInfo = GetModuleByFileName(fileName);
+    if (fileName == "ntoskrnl.exe") {
+        moduleInfo = GetModule("nt");   // 跟 GetFunctionVaFromExport 同樣特例
+    }
+
+    if (!moduleInfo) {
+        Logger::Log(true, ConsoleColor::RED,
+            "[-] ListAllFunctionsByDbgEng: module %s not found\n",
+            fileName.c_str());
+        return result;
+    }
+
+    // DbgEng 的 symbol pattern: "modname!*"
+    // 例如 nt!*、win32kfull!* ...
+    std::string pattern = moduleInfo->Name + "!*";
+
+    // 第一次呼叫只拿 count
+    ULONG count = 0;
+    HRESULT hr = Symbols_->GetSymbolEntriesByName(
+        pattern.c_str(),
+        0,          // Flags = 0
+        nullptr,    // Ids = nullptr (只拿數量)
+        0,          // IdsCount = 0
+        &count      // Entries = 符合個數
+    );
+
+    if (FAILED(hr) || count == 0) {
+        Logger::Log(true, ConsoleColor::RED,
+            "[-] GetSymbolEntriesByName(%s) failed or no symbol (hr=0x%lx, count=%lu)\n",
+            pattern.c_str(), hr, count);
+        return result;
+    }
+
+    std::vector<DEBUG_MODULE_AND_ID> ids(count);
+
+    // 第二次真的把每個 symbol 的 DEBUG_MODULE_AND_ID 取出來
+    hr = Symbols_->GetSymbolEntriesByName(
+        pattern.c_str(),
+        0,
+        ids.data(),
+        count,
+        nullptr      // Entries 可以為 nullptr，因為我們只要 ids
+    );
+
+    if (FAILED(hr)) {
+        Logger::Log(true, ConsoleColor::RED,
+            "[-] GetSymbolEntriesByName(%s) (2nd) failed, hr=0x%lx\n",
+            pattern.c_str(), hr);
+        return result;
+    }
+
+    // 逐個 symbol 取資訊
+    for (ULONG i = 0; i < count; ++i) {
+        const DEBUG_MODULE_AND_ID& id = ids[i];
+
+        DEBUG_SYMBOL_ENTRY entry{};
+        hr = Symbols_->GetSymbolEntryInformation(
+            const_cast<DEBUG_MODULE_AND_ID*>(&id),
+            &entry
+        );
+        if (FAILED(hr))
+            continue;
+
+        // 過濾：只要 function 類型的 symbol
+        if (!IsFunctionTag(entry.Tag))
+            continue;
+
+        char nameBuf[512] = {};
+        ULONG nameLen = 0;
+
+        hr = Symbols_->GetSymbolEntryString(
+            const_cast<DEBUG_MODULE_AND_ID*>(&id),
+            0x00000000, // 要 name
+            nameBuf,
+            static_cast<ULONG>(sizeof(nameBuf)),
+            &nameLen
+        );
+        if (FAILED(hr))
+            continue;
+
+        ExportFunctionInfo info{};
+        info.Name = nameBuf;
+        info.Va = entry.Offset;   // entry.Offset 就是該函式的 VA
+
+        result.emplace_back(std::move(info));
+    }
+
+    return result;
 }
