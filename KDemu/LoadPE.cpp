@@ -456,8 +456,8 @@ void PEloader::InitProcessor() {
 	this->objectList.emplace_back(idtrObj);
 	*/
 
-	auto idtrObj = std::make_shared<Object>("idtr", idtr, 0x1000);
-	this->objectList.emplace_back(idtrObj);
+	/*auto idtrObj = std::make_shared<Object>("idtr", idtr, 0x1000);
+	this->objectList.emplace_back(idtrObj);*/
 
 	emu->idtr(idtr, 0x0FFF);
 	emu->alloc(0x1000, idtr);
@@ -509,8 +509,8 @@ void PEloader::InitProcessor() {
 	// MOD_TEST
 	/*Object* cr3Obj = new Object("CR3", cr3, 0x1000);
 	this->objectList.emplace_back(cr3Obj);*/
-	auto cr3Obj = std::make_shared<Object>("CR3", cr3, 0x1000);
-	this->objectList.emplace_back(cr3Obj);
+	/*auto cr3Obj = std::make_shared<Object>("CR3", cr3, 0x1000);
+	this->objectList.emplace_back(cr3Obj);*/
 
 	emu->cr4(cr4);
 	emu->cr8(cr8);
@@ -755,7 +755,7 @@ bool PEloader::LoadPE(const std::string path) {
 	peFiles[0]->ExceptionTable = peFiles[0]->Base + ((PUCHAR)ExceptionTable - (PUCHAR)peFiles[0]->memMap);
 
 
-	uint64_t RtlpInvertedFunctionTableList = g_Debugger->GetSymbol("nt!PsInvertedFunctionTable") + 0x30;//0xfffff80508c18088; //PsInvertedFunctionTable
+	uint64_t RtlpInvertedFunctionTableList = 0xfffff80508c18088;// g_Debugger->GetSymbol("nt!PsInvertedFunctionTable") + 0x30; <- listhead
 	uint64_t imagebase = 0xfffff80508c18090;
 	uint64_t imagesizebase = 0xfffff80508c18098;
 	uint64_t ExceptionTableSizebase = 0xfffff80508c1809C;
@@ -770,9 +770,6 @@ bool PEloader::LoadPE(const std::string path) {
 // MOD_TEST
 void PEloader::LoadModule(const std::string path, int type) {
 	auto peBinary = LIEF::PE::Parser::parse(path);
-	if (path == "ntoskrnl.exe") {
-		int i = 0;
-	}
 	if (!peBinary) {
 		char mpath[MAX_PATH];
 		ExpandEnvironmentStringsA("%windir%\\System32\\", mpath, MAX_PATH);
@@ -861,6 +858,15 @@ void PEloader::LoadModule(const std::string path, int type) {
 			if (page != NULL) {
 				Emu(uc)->write(check, kdmp.GetVirtualPage(check), 0x1000);
 			}
+		}
+		if (path == "ntoskrnl.exe") {
+
+			bool KdDebuggerNotPresent = 1;
+			bool KdDebuggerEnabled = 0;
+			uint64_t KdDebuggerNotPresentaddress = pe->Base + pe->FuncAddr["KdDebuggerNotPresent"];
+			uint64_t KdDebuggerEnabledaddress = pe->Base + pe->FuncAddr["KdDebuggerEnabled"];
+			Emu(uc)->write(KdDebuggerNotPresentaddress, &KdDebuggerNotPresent, sizeof(KdDebuggerNotPresent));
+			Emu(uc)->write(KdDebuggerEnabledaddress, &KdDebuggerEnabled, sizeof(KdDebuggerEnabled));
 		}
 
 
